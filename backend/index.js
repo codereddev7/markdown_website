@@ -12,7 +12,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS setup to support HTTP-only cookies
-const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins =
+  process.env.NODE_ENV === 'production'
+    ? ["https://codereddev.netlify.app"]
+    : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -26,6 +30,14 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

@@ -1,20 +1,24 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const Admin = require('../models/Admin');
-const RefreshToken = require('../models/RefreshToken');
-const auth = require('../middleware/auth');
-const crypto = require('crypto');
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const Admin = require("../models/Admin");
+const RefreshToken = require("../models/RefreshToken");
+const auth = require("../middleware/auth");
+const crypto = require("crypto");
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret123';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is not set");
+}
 
 // Helper to generate access token
 const generateAccessToken = (adminId) => {
   return jwt.sign(
     { user: { id: adminId } },
     JWT_SECRET,
-    { expiresIn: '15m' } // Short-lived Access Token
+    { expiresIn: "15m" }, // Short-lived Access Token
   );
 };
 
@@ -23,44 +27,42 @@ const generateRefreshToken = (adminId) => {
   return jwt.sign(
     { user: { id: adminId } },
     JWT_SECRET,
-    { expiresIn: '30d' } // Long-lived Refresh Token (30 days)
+    { expiresIn: "30d" }, // Long-lived Refresh Token (30 days)
   );
 };
 
 // Helper to set cookie options
-const getCookieOptions = (maxAge) => {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: maxAge,
-  };
-};
+const getCookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  maxAge,
+});
 
 // @route   POST api/auth/login
 // @desc    Authenticate admin & set cookies
 // @access  Public
-router.post('/login', async (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
     const admin = await Admin.findOne({ email });
     if (!admin) {
-      return res.status(400).json({ msg: 'Invalid Credentials' });
+      return res.status(400).json({ msg: "Invalid Credentials" });
     }
 
     const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) {
-      return res.status(400).json({ msg: 'Invalid Credentials' });
+      return res.status(400).json({ msg: "Invalid Credentials" });
     }
 
     // Generate tokens
     const accessToken = generateAccessToken(admin._id);
     const refreshToken = generateRefreshToken(admin._id);
-    
+
     // Group rotated tokens in a single session family using a random UUID
     const familyId = crypto.randomUUID();
-    
+
     // Save refresh token to DB
     const newRefreshToken = new RefreshToken({
       token: refreshToken,
@@ -71,43 +73,53 @@ router.post('/login', async (req, res) => {
     await newRefreshToken.save();
 
     // Set HTTP-Only cookies
-    res.cookie('access_token', accessToken, getCookieOptions(15 * 60 * 1000)); // 15 mins
-    res.cookie('refresh_token', refreshToken, getCookieOptions(30 * 24 * 60 * 60 * 1000)); // 30 days
+    res.cookie("access_token", accessToken, getCookieOptions(15 * 60 * 1000)); // 15 mins
+    res.cookie(
+      "refresh_token",
+      refreshToken,
+      getCookieOptions(30 * 24 * 60 * 60 * 1000),
+    ); // 30 days
 
     res.json({ success: true });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server Error');
+    res.status(500).send("Server Error");
   }
 });
 
 // @route   POST api/auth/refresh
 // @desc    Rotate access & refresh tokens
 // @access  Public
-router.post('/refresh', async (req, res) => {
+router.post("/refresh", async (req, res) => {
   const refreshTokenVal = req.cookies.refresh_token;
 
   if (!refreshTokenVal) {
-    return res.status(401).json({ msg: 'No refresh token, authorization denied' });
+    return res
+      .status(401)
+      .json({ msg: "No refresh token, authorization denied" });
   }
 
   try {
     // Verify refresh token
     const decoded = jwt.verify(refreshTokenVal, JWT_SECRET);
-    
+
     // Find refresh token in DB
     const dbToken = await RefreshToken.findOne({ token: refreshTokenVal });
-    
+
     // Token Reuse Detection (If token was already used)
     if (!dbToken || dbToken.isUsed) {
       if (dbToken) {
         // Attack detected: clear all tokens in the same family to log out the user entirely
-        console.warn(`Token reuse detected! Revoking family ${dbToken.familyId}`);
+        console.warn(
+          `Token reuse detected! Revoking family ${dbToken.familyId}`,
+        );
         await RefreshToken.deleteMany({ familyId: dbToken.familyId });
       }
-      res.clearCookie('access_token');
-      res.clearCookie('refresh_token');
-      return res.status(401).json({ msg: 'Session invalidated. Please login again.' });
+      res.clearCookie("access_token");
+      res.clearCookie("refresh_token");
+      return res
+        .status(401)
+        .json({ msg: "Session invalidated. Please login again." });
     }
 
     // Token is valid and unused. Rotate it.
@@ -127,22 +139,30 @@ router.post('/refresh', async (req, res) => {
     await rotatedToken.save();
 
     // Update cookies
-    res.cookie('access_token', newAccessToken, getCookieOptions(15 * 60 * 1000)); // 15 mins
-    res.cookie('refresh_token', newRefreshTokenVal, getCookieOptions(30 * 24 * 60 * 60 * 1000)); // 30 days
+    res.cookie(
+      "access_token",
+      newAccessToken,
+      getCookieOptions(15 * 60 * 1000),
+    ); // 15 mins
+    res.cookie(
+      "refresh_token",
+      newRefreshTokenVal,
+      getCookieOptions(30 * 24 * 60 * 60 * 1000),
+    ); // 30 days
 
     res.json({ success: true });
   } catch (err) {
     console.error(err.message);
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
-    return res.status(401).json({ msg: 'Invalid or expired refresh token' });
+    res.clearCookie("access_token");
+    res.clearCookie("refresh_token");
+    return res.status(401).json({ msg: "Invalid or expired refresh token" });
   }
 });
 
 // @route   POST api/auth/logout
 // @desc    Logout admin and clear cookies
 // @access  Public
-router.post('/logout', async (req, res) => {
+router.post("/logout", async (req, res) => {
   const refreshTokenVal = req.cookies.refresh_token;
 
   try {
@@ -154,10 +174,10 @@ router.post('/logout', async (req, res) => {
       }
     }
   } catch (err) {
-    console.error('Logout db error:', err.message);
+    console.error("Logout db error:", err.message);
   } finally {
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
+    res.clearCookie("access_token");
+    res.clearCookie("refresh_token");
     res.json({ success: true });
   }
 });
@@ -165,7 +185,7 @@ router.post('/logout', async (req, res) => {
 // @route   GET api/auth/status
 // @desc    Check authentication status
 // @access  Private (auth middleware protected)
-router.get('/status', auth, (req, res) => {
+router.get("/status", auth, (req, res) => {
   res.json({ isAuthenticated: true, user: req.user });
 });
 
