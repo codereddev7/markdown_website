@@ -1,15 +1,28 @@
-// Service Worker for Code Red Dev PWA
-const CACHE_NAME = 'code-red-dev-v1';
+const CACHE_NAME = 'my-pwa-cache-v1';
+const urlsToCache = [
+  '/',                  // Aapka main route
+  '/index.html',        // Main HTML
+  '/manifest.json',     // Manifest file
+  '/icons/icon-192x192.png', // Icons ke sahi paths (jo manifest me hain)
+  '/icons/icon-512x512.png'
+];
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
+// Install Service Worker
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        return cache.addAll(urlsToCache);
+      })
+  );
 });
 
-self.addEventListener('activate', (e) => {
-  self.clients.claim();
-});
-
-// A simple pass-through fetch handler is required for PWA installability
-self.addEventListener('fetch', (e) => {
-  // Let the browser fetch directly
+// Fetch Cache
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request)
+      .then(response => {
+        return response || fetch(event.request);
+      })
+  );
 });
