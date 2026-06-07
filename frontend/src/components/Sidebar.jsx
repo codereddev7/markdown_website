@@ -32,7 +32,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   const filteredTreeData = useMemo(() => {
     if (!searchQuery.trim()) return null;
     const query = searchQuery.toLowerCase().trim();
-    
+
     // Find all items matching the query directly
     const directMatchingIds = new Set();
     items.forEach(item => {
@@ -152,7 +152,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     if (e) e.stopPropagation();
     const newSelected = new Set(selectedItemIds);
     const item = items.find(i => i._id === itemId);
-    
+
     if (newSelected.has(itemId)) {
       newSelected.delete(itemId);
       // If it's a folder, also deselect all its children recursively
@@ -174,10 +174,10 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   const handleBatchDelete = async () => {
     if (selectedItemIds.size === 0) return;
     if (!confirm(`Are you sure you want to delete the ${selectedItemIds.size} selected item(s)?`)) return;
-    
+
     try {
       await api.post('/items/action/batch-delete', { ids: Array.from(selectedItemIds) });
-      const shouldClose = selectedItemIds.has(selectedFileId) || 
+      const shouldClose = selectedItemIds.has(selectedFileId) ||
         Array.from(selectedItemIds).some(id => activeAncestors.has(id));
       if (shouldClose) {
         onSelectFile(null);
@@ -228,7 +228,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   const activeAncestors = useMemo(() => {
     const ancestors = new Set();
     if (!selectedFileId) return ancestors;
-    
+
     const parentMap = {};
     items.forEach(i => {
       parentMap[i._id] = i.parentId;
@@ -341,7 +341,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) return;
-    
+
     // Only reset hovered folder if the drag target is NOT over a folder tree-item
     const folderTreeItem = e.target.closest('.tree-item[data-is-folder="true"]');
     if (!folderTreeItem) {
@@ -372,7 +372,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     setDragHoveredFolderId(null);
     clearDragTimeout();
     if (!isAuthenticated) return;
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       Array.from(e.dataTransfer.files).forEach(file => {
         uploadFile(file, targetFolderId); // Upload to target folder or root
@@ -386,10 +386,10 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) return;
-    
+
     if (dragHoveredFolderId !== folderId) {
       setDragHoveredFolderId(folderId);
-      
+
       // Auto-expand folder on drag hover after 800ms
       clearDragTimeout();
       dragExpandTimeoutRef.current = setTimeout(() => {
@@ -411,7 +411,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     setDragHoveredFolderId(null);
     clearDragTimeout();
     if (!isAuthenticated) return;
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       Array.from(e.dataTransfer.files).forEach(file => {
         uploadFile(file, folderId); // Upload to folder
@@ -450,7 +450,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     if (newName === item.name) return;
 
     // Client-side duplicate check
-    const isDuplicate = items.some(existingItem => 
+    const isDuplicate = items.some(existingItem =>
       existingItem.parentId === item.parentId &&
       existingItem._id !== item._id &&
       existingItem.name.toLowerCase() === newName.toLowerCase()
@@ -516,7 +516,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   };
 
   const renderTree = (itemsList, parentIdStr = 'root', paddingLeft = 10) => {
-    const displayedItems = filteredTreeData 
+    const displayedItems = filteredTreeData
       ? itemsList.filter(item => filteredTreeData.visibleIds.has(item._id))
       : itemsList;
 
@@ -531,7 +531,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
           >
             {displayedItems.map((item, index) => {
               const isExpanded = expandedFolders.has(item._id);
-              
+
               return (
                 <Draggable key={item._id} draggableId={item._id} index={index} isDragDisabled={isSelectMode || !isAuthenticated}>
                   {(provided, snapshot) => (
@@ -638,7 +638,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   };
 
   return (
-    <div 
+    <div
       className={`sidebar ${!isOpen ? 'hidden' : ''} ${isDragActive ? 'drag-active' : ''}`}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -701,7 +701,9 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
             className="sidebar-search-input"
             placeholder="Search files & folders..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); setSearchQuery(e.target.value) }}
           />
           {searchQuery && (
             <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear Search">
