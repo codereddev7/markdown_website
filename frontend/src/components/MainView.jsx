@@ -64,11 +64,11 @@ const MainView = () => {
     setSelectedFile(file);
     setIsEditing(false);
     setIsAiOpen(false); // Close AI panel when switching files
-    
+
     if (isMobile) {
       setIsSidebarOpen(false);
     }
-    
+
     if (file && file.cloudinaryUrl && !file.cloudinaryUrl.startsWith('https://mock.url')) {
       try {
         setContentLoading(true);
@@ -119,12 +119,13 @@ const MainView = () => {
 
   return (
     <div className="app-container">
-      <Sidebar 
-        items={items} 
-        fetchItems={fetchItems} 
+      <Sidebar
+        items={items}
+        fetchItems={fetchItems}
         onSelectFile={handleSelectFile}
         selectedFileId={selectedFile?._id}
         isOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
       />
       {isMobile && isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
@@ -132,16 +133,16 @@ const MainView = () => {
       <div className="main-content">
         {selectedFile ? (
           isAiOpen ? (
-            <AiPanel 
-              selectedFile={selectedFile} 
-              fileContent={fileContent} 
-              onClose={() => setIsAiOpen(false)} 
+            <AiPanel
+              selectedFile={selectedFile}
+              fileContent={fileContent}
+              onClose={() => setIsAiOpen(false)}
             />
           ) : isAuthenticated && isEditing ? (
-            <Editor 
-              initialContent={fileContent} 
-              onSave={handleSave} 
-              onCancel={() => setIsEditing(false)} 
+            <Editor
+              initialContent={fileContent}
+              onSave={handleSave}
+              onCancel={() => setIsEditing(false)}
               toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
               fileName={selectedFile.name.replace(/\.md$/i, '')}
               saveLoading={saveLoading}
@@ -176,12 +177,12 @@ const MainView = () => {
                     <p>Loading file content...</p>
                   </div>
                 ) : (
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]} 
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
                     rehypePlugins={[rehypeHighlight]}
                     components={{
                       code(props) {
-                        const {children, className, node, ...rest} = props;
+                        const { children, className, node, ...rest } = props;
                         const match = /language-(\w+)/.exec(className || '');
                         if (match && match[1] === 'mermaid') {
                           return <Mermaid chart={String(children).replace(/\n$/, '')} />;
