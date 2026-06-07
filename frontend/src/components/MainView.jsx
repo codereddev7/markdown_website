@@ -125,7 +125,6 @@ const MainView = () => {
         onSelectFile={handleSelectFile}
         selectedFileId={selectedFile?._id}
         isOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
       />
       {isMobile && isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />

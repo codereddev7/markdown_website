@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import logoImg from '../assets/Logo.png';
 import { ThemeContext } from '../context/ThemeContext';
 
-const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen, setIsSidebarOpen }) => {
+const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) => {
   const { isAuthenticated, logout } = useContext(AuthContext);
   const { themeMode, setThemeMode } = useContext(ThemeContext);
   const navigate = useNavigate();
@@ -694,14 +694,14 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen, setI
         )}
       </div>
       <div className="sidebar-search-container">
-        <div className="search-input-wrapper" onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(true) }}>
+        <div className="search-input-wrapper">
           <FaSearch className="search-icon" />
           <input
             type="text"
             className="sidebar-search-input"
             placeholder="Search files & folders..."
             value={searchQuery}
-            onChange={(e) => { e.stopPropagation(); setSearchQuery(e.target.value) }}
+            onChange={(e) => { setSearchQuery(e.target.value) }}
           />
           {searchQuery && (
             <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear Search">
