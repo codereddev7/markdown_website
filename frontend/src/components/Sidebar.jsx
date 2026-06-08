@@ -211,10 +211,8 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     const rootItems = [];
     const childrenMap = {};
 
-    // Sort items by order before grouping
-    const sortedItems = [...items].sort((a, b) => a.order - b.order);
-
-    sortedItems.forEach(item => {
+    // Group items first
+    items.forEach(item => {
       if (!item.parentId) {
         rootItems.push(item);
       } else {
@@ -222,6 +220,29 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
         childrenMap[item.parentId].push(item);
       }
     });
+
+    // 1. Sort rootItems by order ascending, then by creation date (newest first / descending)
+    rootItems.sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order - b.order;
+      }
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return dateB - dateA;
+    });
+
+    // 2. Sort subfolder items by order ascending, then by creation date (oldest first / ascending)
+    Object.keys(childrenMap).forEach(parentId => {
+      childrenMap[parentId].sort((a, b) => {
+        if (a.order !== b.order) {
+          return a.order - b.order;
+        }
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateA - dateB;
+      });
+    });
+
     return { rootItems, childrenMap };
   }, [items]);
 

@@ -12,10 +12,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS setup to support HTTP-only cookies
-const allowedOrigins =
-  process.env.NODE_ENV === 'production'
-    ? ["https://codereddev.netlify.app"]
-    : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : (process.env.NODE_ENV === 'production'
+      ? ["https://codereddev.netlify.app"]
+      : ['http://localhost:5173', 'http://10.60.102.106:5173']);
 
 app.use(cors({
   origin: function (origin, callback) {

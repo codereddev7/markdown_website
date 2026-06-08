@@ -15,6 +15,20 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(true);
         }
       } catch (err) {
+        // Silent token refresh if access token is expired or missing
+        try {
+          console.log('Access token expired or missing. Attempting silent token refresh...');
+          const refreshRes = await api.post('/auth/refresh');
+          if (refreshRes.data.success) {
+            const statusRes = await api.get('/auth/status');
+            if (statusRes.data.isAuthenticated) {
+              setIsAuthenticated(true);
+              return;
+            }
+          }
+        } catch (refreshErr) {
+          console.error('Failed to refresh session:', refreshErr);
+        }
         setIsAuthenticated(false);
       } finally {
         setLoading(false);

@@ -26,11 +26,15 @@ const MainView = () => {
   const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
+    let prevMobile = window.innerWidth <= 768;
     const handleResize = () => {
       const mobile = window.innerWidth <= 768;
       setIsMobile(mobile);
-      // Close sidebar by default on resize to mobile, open on desktop
-      setIsSidebarOpen(!mobile);
+      // Only change sidebar open state if we actually crossed the mobile boundary
+      if (mobile !== prevMobile) {
+        setIsSidebarOpen(!mobile);
+        prevMobile = mobile;
+      }
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);

@@ -32,12 +32,17 @@ const generateRefreshToken = (adminId) => {
 };
 
 // Helper to set cookie options
-const getCookieOptions = (maxAge) => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  maxAge,
-});
+const getCookieOptions = (maxAge) => {
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  };
+  if (maxAge !== undefined) {
+    options.maxAge = maxAge;
+  }
+  return options;
+};
 
 // @route   POST api/auth/login
 // @desc    Authenticate admin & set cookies
@@ -115,8 +120,8 @@ router.post("/refresh", async (req, res) => {
         );
         await RefreshToken.deleteMany({ familyId: dbToken.familyId });
       }
-      res.clearCookie("access_token");
-      res.clearCookie("refresh_token");
+      res.clearCookie("access_token", getCookieOptions());
+      res.clearCookie("refresh_token", getCookieOptions());
       return res
         .status(401)
         .json({ msg: "Session invalidated. Please login again." });
@@ -153,8 +158,8 @@ router.post("/refresh", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error(err.message);
-    res.clearCookie("access_token");
-    res.clearCookie("refresh_token");
+    res.clearCookie("access_token", getCookieOptions());
+    res.clearCookie("refresh_token", getCookieOptions());
     return res.status(401).json({ msg: "Invalid or expired refresh token" });
   }
 });
@@ -164,6 +169,7 @@ router.post("/refresh", async (req, res) => {
 // @access  Public
 router.post("/logout", async (req, res) => {
   const refreshTokenVal = req.cookies.refresh_token;
+  console.log("refreshTokenVal", refreshTokenVal);
 
   try {
     if (refreshTokenVal) {
@@ -176,8 +182,8 @@ router.post("/logout", async (req, res) => {
   } catch (err) {
     console.error("Logout db error:", err.message);
   } finally {
-    res.clearCookie("access_token");
-    res.clearCookie("refresh_token");
+    res.clearCookie("access_token", getCookieOptions());
+    res.clearCookie("refresh_token", getCookieOptions());
     res.json({ success: true });
   }
 });

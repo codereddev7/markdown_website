@@ -1,7 +1,25 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl) return '/api';
+  
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    try {
+      const url = new URL(envUrl);
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        url.hostname = window.location.hostname;
+        return `${url.origin}/api`;
+      }
+    } catch (e) {
+      // Ignore URL parsing errors
+    }
+  }
+  return `${envUrl}/api`;
+};
+
 const api = axios.create({
-  baseURL: `${import.meta.env.VITE_API_URL}/api`,
+  baseURL: getBaseURL(),
   withCredentials: true, // Send cookies automatically
 });
 

@@ -75,9 +75,17 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ msg: `An item named "${name}" already exists in this folder` });
     }
     
-    // Get max order in parent
-    const maxOrderObj = await Item.findOne({ parentId: parentId || null }).sort({ order: -1 });
-    const order = maxOrderObj ? maxOrderObj.order + 1 : 0;
+    // Get default order based on root vs subfolder
+    let order = 0;
+    if (parentId) {
+      // Subfolder: new items go to the bottom (max order + 1)
+      const maxOrderObj = await Item.findOne({ parentId }).sort({ order: -1 });
+      order = maxOrderObj ? maxOrderObj.order + 1 : 0;
+    } else {
+      // Root: new items go to the top (min order - 1)
+      const minOrderObj = await Item.findOne({ parentId: null }).sort({ order: 1 });
+      order = minOrderObj ? minOrderObj.order - 1 : 0;
+    }
 
     const newItem = new Item({
       name,
