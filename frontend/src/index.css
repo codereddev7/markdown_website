@@ -1554,3 +1554,33 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* ESC Button in Footer */
+.esc-btn {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  height: 38px;
+  min-width: 45px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.esc-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background-color: var(--bg-hover);
+}
+
+.esc-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--border);
+  color: var(--text-muted);
+}

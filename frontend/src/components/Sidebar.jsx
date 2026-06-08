@@ -752,10 +752,20 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
         </div>
       )}
       <div className="sidebar-footer" style={{ flexDirection: 'column', gap: '15px' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', backgroundColor: 'var(--bg-dark)', padding: '5px', borderRadius: '8px' }}>
-          <button className={`action-btn ${themeMode === 'light' ? 'active' : ''}`} style={{ color: themeMode === 'light' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('light')} title="Light Mode"><FaSun /></button>
-          <button className={`action-btn ${themeMode === 'dark' ? 'active' : ''}`} style={{ color: themeMode === 'dark' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('dark')} title="Dark Mode"><FaMoon /></button>
-          <button className={`action-btn ${themeMode === 'system' ? 'active' : ''}`} style={{ color: themeMode === 'system' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('system')} title="System Mode"><FaDesktop /></button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px' }}>
+          <div style={{ display: 'flex', flex: 1, justifyContent: 'center', gap: '10px', backgroundColor: 'var(--bg-dark)', padding: '5px', borderRadius: '8px' }}>
+            <button className={`action-btn ${themeMode === 'light' ? 'active' : ''}`} style={{ color: themeMode === 'light' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('light')} title="Light Mode"><FaSun /></button>
+            <button className={`action-btn ${themeMode === 'dark' ? 'active' : ''}`} style={{ color: themeMode === 'dark' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('dark')} title="Dark Mode"><FaMoon /></button>
+            <button className={`action-btn ${themeMode === 'system' ? 'active' : ''}`} style={{ color: themeMode === 'system' ? 'var(--accent)' : '' }} onClick={() => setThemeMode('system')} title="System Mode"><FaDesktop /></button>
+          </div>
+          <button 
+            className="action-btn esc-btn"
+            onClick={() => onSelectFile(null)}
+            disabled={!selectedFileId}
+            title="Deselect File (ESC)"
+          >
+            ESC
+          </button>
         </div>
         {isAuthenticated ? (
           <button className="btn btn-danger" style={{ width: '100%' }} onClick={logout}>Logout</button>
