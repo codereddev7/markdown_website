@@ -12,7 +12,6 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Helper to upload text content to cloudinary as a raw file
 const uploadToCloudinary = async (filename, content) => {
   if (!process.env.CLOUDINARY_CLOUD_NAME) {
     console.warn("Cloudinary not configured. Mocking upload.");
@@ -24,11 +23,15 @@ const uploadToCloudinary = async (filename, content) => {
   const base64Content = Buffer.from(content).toString('base64');
   const dataUri = `data:text/plain;base64,${base64Content}`;
   
+  // Cloudinary public_id only allows alphanumeric characters, underscores, hyphens, and periods.
+  // We sanitize the filename by replacing any other characters with underscores.
+  const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  
   return new Promise((resolve, reject) => {
     cloudinary.uploader.upload(dataUri, {
       resource_type: 'raw',
       folder: 'markdown',
-      public_id: `${filename}_${Date.now()}`
+      public_id: `${sanitizedFilename}_${Date.now()}`
     }, (error, result) => {
       if (error) reject(error);
       else resolve(result);
