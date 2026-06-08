@@ -15,8 +15,8 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : (process.env.NODE_ENV === 'production'
-      ? ["https://codereddev.netlify.app"]
-      : ['http://localhost:5173', 'http://10.60.102.106:5173']);
+    ? ["https://codereddev.netlify.app"]
+    : ['http://localhost:5173', 'http://10.60.102.106:5173']);
 
 app.use(cors({
   origin: function (origin, callback) {

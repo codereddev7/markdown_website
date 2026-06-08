@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect } from 'react';
 import api from '../api';
 
 export const AuthContext = createContext();
@@ -11,6 +11,7 @@ export const AuthProvider = ({ children }) => {
     const checkAuthStatus = async () => {
       try {
         const res = await api.get('/auth/status');
+        console.log(res.data)
         if (res.data.isAuthenticated) {
           setIsAuthenticated(true);
         }
