@@ -43,7 +43,10 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
 
     // If a folder matches directly, recursively include all of its sub-items
     const matchingIds = new Set(directMatchingIds);
+    const visitedDescendants = new Set();
     const collectAllDescendants = (parentId) => {
+      if (visitedDescendants.has(parentId)) return;
+      visitedDescendants.add(parentId);
       const children = items.filter(item => item.parentId === parentId);
       children.forEach(child => {
         matchingIds.add(child._id);
@@ -69,7 +72,9 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
 
     matchingIds.forEach(id => {
       let currentParent = parentMap[id];
-      while (currentParent) {
+      const visitedParents = new Set();
+      while (currentParent && !visitedParents.has(currentParent)) {
+        visitedParents.add(currentParent);
         visibleIds.add(currentParent);
         currentParent = parentMap[currentParent];
       }
@@ -117,9 +122,11 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
       });
 
       const ancestorsToExpand = new Set();
+      const visitedAncestors = new Set();
       directMatchingIds.forEach(id => {
         let parentId = parentMap[id];
-        while (parentId) {
+        while (parentId && !visitedAncestors.has(parentId)) {
+          visitedAncestors.add(parentId);
           ancestorsToExpand.add(parentId);
           parentId = parentMap[parentId];
         }
@@ -136,13 +143,15 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
 
 
   // Helper to recursively collect all children IDs of a folder
-  const getAllChildIds = (parentId) => {
+  const getAllChildIds = (parentId, visited = new Set()) => {
+    if (visited.has(parentId)) return [];
+    visited.add(parentId);
     const childIds = [];
     const children = items.filter(item => item.parentId === parentId);
     children.forEach(child => {
       childIds.push(child._id);
       if (child.type === 'folder') {
-        childIds.push(...getAllChildIds(child._id));
+        childIds.push(...getAllChildIds(child._id, visited));
       }
     });
     return childIds;
@@ -256,7 +265,9 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     });
 
     let currentParent = parentMap[selectedFileId];
-    while (currentParent) {
+    const visitedAncestors = new Set();
+    while (currentParent && !visitedAncestors.has(currentParent)) {
+      visitedAncestors.add(currentParent);
       ancestors.add(currentParent);
       currentParent = parentMap[currentParent];
     }
