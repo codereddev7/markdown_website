@@ -1269,7 +1269,7 @@ body {
 
   .global-header h2 {
     font-size: 1.05rem;
-    max-width: 200px;
+    max-width: 140px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
