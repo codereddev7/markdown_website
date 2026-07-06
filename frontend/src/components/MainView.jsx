@@ -11,6 +11,73 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import Mermaid from './Mermaid';
+import * as mammoth from 'mammoth';
+import { renderAsync } from 'docx-preview';
+
+const base64ToArrayBuffer = (base64) => {
+  const base64String = base64.split(',')[1] || base64;
+  const binaryString = window.atob(base64String);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+};
+
+const DocxPreviewer = ({ buffer }) => {
+  const containerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (containerRef.current && buffer) {
+      containerRef.current.innerHTML = '';
+      console.log("Rendering docx with buffer:", buffer, "type:", typeof buffer, "constructor:", buffer?.constructor?.name);
+      renderAsync(new Blob([buffer]), containerRef.current, null, {
+        className: "docx-render",
+        inWrapper: true,
+        ignoreWidth: false,
+        ignoreHeight: false,
+        ignoreFonts: false,
+        breakPages: true,
+        experimental: true,
+        useImgCc: false,
+      }).catch(err => {
+        console.error("Error rendering docx:", err);
+        containerRef.current.innerHTML = `<p style="color: red; padding: 20px;">Failed to render docx file: ${err.message || err.toString()}</p>`;
+      });
+    }
+  }, [buffer]);
+
+  if (!buffer) {
+    return <p style={{ padding: '20px' }}>Loading document preview...</p>;
+  }
+
+  return (
+    <div 
+      style={{ 
+        flex: 1, 
+        overflowY: 'auto', 
+        padding: '20px', 
+        display: 'flex', 
+        justifyContent: 'center', 
+        backgroundColor: 'var(--bg-secondary, #f3f4f6)',
+        width: '100%',
+        height: '100%'
+      }}
+    >
+      <div 
+        ref={containerRef} 
+        style={{ 
+          width: '100%', 
+          maxWidth: '850px',
+          backgroundColor: '#fff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          borderRadius: '8px'
+        }} 
+      />
+    </div>
+  );
+};
 
 const MainView = () => {
   const { isAuthenticated } = useContext(AuthContext);
@@ -24,6 +91,7 @@ const MainView = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [contentLoading, setContentLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [docxBuffer, setDocxBuffer] = useState(null);
 
   useEffect(() => {
     let prevMobile = window.innerWidth <= 768;
@@ -49,6 +117,7 @@ const MainView = () => {
       if (e.key === 'Escape' && selectedFile && !isEditing) {
         setSelectedFile(null);
         setFileContent('');
+        setDocxBuffer(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -64,45 +133,100 @@ const MainView = () => {
     }
   };
 
+  const getFileExtension = (file) => {
+    if (!file) return '';
+    if (file.extension) return file.extension.toLowerCase();
+
+    // Fallback: extract from name
+    const nameParts = file.name.split('.');
+    if (nameParts.length > 1) {
+      return nameParts.pop().toLowerCase();
+    }
+
+    // Fallback: extract from cloudinaryUrl
+    if (file.cloudinaryUrl) {
+      const urlParts = file.cloudinaryUrl.split('?')[0].split('.');
+      if (urlParts.length > 1) {
+        return urlParts.pop().toLowerCase();
+      }
+    }
+
+    return '';
+  };
+
   const handleSelectFile = async (file) => {
     setSelectedFile(file);
     setIsEditing(false);
     setIsAiOpen(false); // Close AI panel when switching files
+    setDocxBuffer(null); // Reset docx buffer
 
     if (isMobile) {
       setIsSidebarOpen(false);
     }
 
-    if (file && file.cloudinaryUrl && !file.cloudinaryUrl.startsWith('https://mock.url')) {
+    if (!file) {
+      setFileContent('');
+      return;
+    }
+
+    const ext = getFileExtension(file);
+    const isText = ['md', 'txt', 'xml', 'html', 'css', 'js', 'json', 'yaml', 'yml', 'ini', 'csv'].includes(ext);
+    const isDocx = ext === 'docx' || ext === 'doc';
+
+    if (!isText && !isDocx) {
+      setFileContent(file.content || '');
+      return;
+    }
+
+    if (isDocx) {
       try {
         setContentLoading(true);
-        const res = await fetch(file.cloudinaryUrl);
-        const text = await res.text();
-        setFileContent(text);
+        let arrayBuffer = null;
+        if (file.cloudinaryUrl && !file.cloudinaryUrl.startsWith('https://mock.url')) {
+          const res = await api.get(`/items/${file._id}/view`, {
+            responseType: 'arraybuffer'
+          });
+          arrayBuffer = res.data;
+        } else if (file.content) {
+          arrayBuffer = base64ToArrayBuffer(file.content);
+        }
+        setDocxBuffer(arrayBuffer);
       } catch (error) {
-        console.error("Failed to fetch markdown content:", error);
-        setFileContent('# Error loading file');
+        console.error("Failed to load docx buffer:", error);
+        setDocxBuffer(null);
       } finally {
         setContentLoading(false);
       }
-    } else if (file && file.content !== undefined && file.content !== null) {
+      return;
+    }
+
+    if (file.cloudinaryUrl && !file.cloudinaryUrl.startsWith('https://mock.url')) {
+      try {
+        setContentLoading(true);
+        const res = await api.get(`/items/${file._id}/view`);
+        setFileContent(res.data);
+      } catch (error) {
+        console.error("Failed to fetch file content:", error);
+        setFileContent('Error loading file content.');
+      } finally {
+        setContentLoading(false);
+      }
+    } else if (file.content !== undefined && file.content !== null) {
       setFileContent(file.content);
     } else {
-      setFileContent('# Empty File');
+      setFileContent('');
     }
   };
 
   const handleDownload = () => {
     if (!selectedFile) return;
-    const blob = new Blob([fileContent], { type: 'text/markdown;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const downloadUrl = `${api.defaults.baseURL}/items/${selectedFile._id}/view?download=true`;
     const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', selectedFile.name);
+    link.href = downloadUrl;
+    link.target = '_blank';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   const handleSave = async (newContent) => {
@@ -121,6 +245,98 @@ const MainView = () => {
     }
   };
 
+  const renderNonMdPreview = (ext) => {
+    const fileUrl = `${api.defaults.baseURL}/items/${selectedFile._id}/view`;
+    const isMockOrLocal = !selectedFile.cloudinaryUrl || selectedFile.cloudinaryUrl.startsWith('https://mock.url');
+
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <img
+            src={fileUrl}
+            alt={selectedFile.name}
+            style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          />
+        </div>
+      );
+    }
+
+    if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <video
+            src={fileUrl}
+            controls
+            style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          />
+        </div>
+      );
+    }
+
+    if (['mp3', 'wav'].includes(ext)) {
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <audio src={fileUrl} controls style={{ width: '100%', maxWidth: '500px' }} />
+        </div>
+      );
+    }
+
+    if (['txt', 'xml', 'html', 'css', 'js', 'json', 'yaml', 'yml', 'ini', 'csv'].includes(ext)) {
+      return (
+        <div style={{ padding: '20px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', backgroundColor: 'var(--bg-code, #1e1e1e)', color: 'var(--text-code, #d4d4d4)', borderRadius: '8px', overflowX: 'auto', flex: 1 }}>
+          <code>{fileContent || 'Empty File'}</code>
+        </div>
+      );
+    }
+
+    if (ext === 'pdf') {
+      return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+          <iframe
+            src={fileUrl}
+            title={selectedFile.name}
+            style={{ flex: 1, width: '100%', height: '100%', border: 'none', backgroundColor: '#fff' }}
+          />
+        </div>
+      );
+    }
+
+    if (ext === 'docx' || ext === 'doc') {
+      return <DocxPreviewer buffer={docxBuffer} />;
+    }
+
+    if (['xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+      if (isMockOrLocal) {
+        return (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '20px' }}>
+            <p style={{ color: 'var(--text-muted)' }}>Preview not available for offline office documents ({ext ? `.${ext}` : 'unknown'}).</p>
+            <button className="btn" onClick={handleDownload}>Download File</button>
+          </div>
+        );
+      }
+      return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+          <iframe
+            src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedFile.cloudinaryUrl)}`}
+            title={selectedFile.name}
+            style={{ flex: 1, width: '100%', height: '100%', border: 'none', backgroundColor: '#fff' }}
+          />
+        </div>
+      );
+    }
+
+    // Default Fallback
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '20px' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Preview not available for this file type ({ext ? `.${ext}` : 'unknown'}).</p>
+        <button className="btn" onClick={handleDownload}>Download File</button>
+      </div>
+    );
+  };
+
+  const selectedFileExt = selectedFile ? getFileExtension(selectedFile) : '';
+  const isSelectedFileMd = selectedFileExt === 'md';
+
   return (
     <div className="app-container">
       <Sidebar
@@ -129,6 +345,7 @@ const MainView = () => {
         onSelectFile={handleSelectFile}
         selectedFileId={selectedFile?._id}
         isOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
       {isMobile && isSidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
@@ -147,7 +364,7 @@ const MainView = () => {
               onSave={handleSave}
               onCancel={() => setIsEditing(false)}
               toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-              fileName={selectedFile.name.replace(/\.md$/i, '')}
+              fileName={selectedFile.name.replace(/\.[^/.]+$/, '')}
               saveLoading={saveLoading}
             />
           ) : (
@@ -157,19 +374,23 @@ const MainView = () => {
                   <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
                     <FaBars />
                   </button>
-                  <h2>{selectedFile.name.replace(/\.md$/i, '')}</h2>
+                  <h2>{selectedFile.name.replace(/\.[^/.]+$/, '')}</h2>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button className="btn-secondary" onClick={handleDownload} title="Download File">
                     <FaDownload style={{ marginRight: isMobile ? '0' : '6px' }} />
                     {!isMobile && 'Download'}
                   </button>
-                  <button className={`btn-secondary ${isAiOpen ? 'active' : ''}`} onClick={() => setIsAiOpen(!isAiOpen)} title="AI Copilot">
-                    <FaRobot style={{ marginRight: isMobile ? '0' : '6px' }} />
-                    {!isMobile && 'AI Copilot'}
-                  </button>
-                  {isAuthenticated && (
-                    <button className="btn" onClick={() => setIsEditing(true)}>Edit</button>
+                  {isSelectedFileMd && (
+                    <>
+                      <button className={`btn-secondary ${isAiOpen ? 'active' : ''}`} onClick={() => setIsAiOpen(!isAiOpen)} title="AI Copilot">
+                        <FaRobot style={{ marginRight: isMobile ? '0' : '6px' }} />
+                        {!isMobile && 'AI Copilot'}
+                      </button>
+                      {isAuthenticated && (
+                        <button className="btn" onClick={() => setIsEditing(true)}>Edit</button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -179,6 +400,8 @@ const MainView = () => {
                     <div className="premium-spinner"></div>
                     <p>Loading file content...</p>
                   </div>
+                ) : !isSelectedFileMd ? (
+                  renderNonMdPreview(selectedFileExt)
                 ) : (
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}

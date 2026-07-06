@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const itemSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    required: true,
+  },
   name: {
     type: String,
     required: true,
@@ -27,6 +32,22 @@ const itemSchema = new mongoose.Schema({
     default: null,
   },
   cloudinaryUrl: {
+    type: String,
+    default: null,
+  },
+  isArchive: {
+    type: Boolean,
+    default: false,
+  },
+  isPinned: {
+    type: Boolean,
+    default: false,
+  },
+  pinOrder: {
+    type: Number,
+    default: 0,
+  },
+  extension: {
     type: String,
     default: null,
   },

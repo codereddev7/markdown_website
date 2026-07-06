@@ -7,6 +7,8 @@ const RefreshToken = require("../models/RefreshToken");
 const auth = require("../middleware/auth");
 const crypto = require("crypto");
 
+const Item = require("../models/Item");
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
@@ -43,6 +45,67 @@ const getCookieOptions = (maxAge) => {
   }
   return options;
 };
+
+// @route   POST api/auth/register
+// @desc    Register a new user, create their default Archive folder & set cookies
+// @access  Public
+router.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    let admin = await Admin.findOne({ email });
+    if (admin) {
+      return res.status(400).json({ msg: "User already exists with this email" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    admin = new Admin({
+      email,
+      password: hashedPassword,
+    });
+    await admin.save();
+
+    // Automatically create default Archive folder for this user
+    const archiveFolder = new Item({
+      userId: admin._id,
+      name: "Archive",
+      type: "folder",
+      parentId: null,
+      order: 1000000, // Always sorting Archive at the bottom
+      isArchive: true,
+      isPinned: false
+    });
+    await archiveFolder.save();
+
+    // Generate tokens
+    const accessToken = generateAccessToken(admin._id);
+    const refreshToken = generateRefreshToken(admin._id);
+
+    const familyId = crypto.randomUUID();
+
+    // Save refresh token to DB
+    const newRefreshToken = new RefreshToken({
+      token: refreshToken,
+      adminId: admin._id,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      familyId,
+    });
+    await newRefreshToken.save();
+
+    // Set HTTP-Only cookies
+    res.cookie("access_token", accessToken, getCookieOptions(15 * 60 * 1000)); // 15 mins
+    res.cookie(
+      "refresh_token",
+      refreshToken,
+      getCookieOptions(30 * 24 * 60 * 60 * 1000),
+    ); // 30 days
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
 
 // @route   POST api/auth/login
 // @desc    Authenticate admin & set cookies

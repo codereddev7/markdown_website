@@ -1,14 +1,14 @@
 import React, { useState, useContext, useMemo, useRef, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { FaFolder, FaFolderOpen, FaFileAlt, FaPlus, FaTrash, FaEdit, FaUpload, FaEllipsisV, FaSun, FaMoon, FaDesktop, FaCheckSquare, FaSearch, FaTimes } from 'react-icons/fa';
+import { FaFolder, FaFolderOpen, FaFileAlt, FaPlus, FaTrash, FaEdit, FaUpload, FaEllipsisV, FaSun, FaMoon, FaDesktop, FaCheckSquare, FaSearch, FaTimes, FaThumbtack, FaSortAmountDown, FaSortAmountUp, FaBars, FaSort, FaBan, FaMinusSquare } from 'react-icons/fa';
 import api from '../api';
 
 import { useNavigate } from 'react-router-dom';
 import logoImg from '../assets/Logo.png';
 import { ThemeContext } from '../context/ThemeContext';
 
-const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) => {
+const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen, toggleSidebar }) => {
   const { isAuthenticated, logout } = useContext(AuthContext);
   const { themeMode, setThemeMode } = useContext(ThemeContext);
   const navigate = useNavigate();
@@ -20,6 +20,77 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   const [dragHoveredFolderId, setDragHoveredFolderId] = useState(null);
   const dragCounter = useRef(0);
   const dragExpandTimeoutRef = useRef(null);
+
+  const [sortDirection, setSortDirection] = useState('custom'); // 'custom', 'desc', 'asc'
+  const [isReversed, setIsReversed] = useState(false);
+  const [isPinnedFolderExpanded, setIsPinnedFolderExpanded] = useState(true);
+  const [isPinnedSelectMode, setIsPinnedSelectMode] = useState(false);
+  const [selectedPinnedItemIds, setSelectedPinnedItemIds] = useState(new Set());
+
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const isDesktop = window.innerWidth > 768;
+    if (isDesktop) {
+      const savedDesktop = localStorage.getItem('sidebarWidthDesktop');
+      return savedDesktop ? parseInt(savedDesktop, 10) : 335;
+    } else {
+      const savedMobile = localStorage.getItem('sidebarWidthMobile');
+      return savedMobile ? parseInt(savedMobile, 10) : 300;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const initResize = (e) => {
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      const isDesktop = window.innerWidth > 768;
+      if (isDesktop) {
+        const savedDesktop = localStorage.getItem('sidebarWidthDesktop');
+        setSidebarWidth(savedDesktop ? parseInt(savedDesktop, 10) : 335);
+      } else {
+        const savedMobile = localStorage.getItem('sidebarWidthMobile');
+        setSidebarWidth(savedMobile ? parseInt(savedMobile, 10) : 300);
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+      const isDesktop = window.innerWidth > 768;
+      const minW = isDesktop ? 335 : 300;
+      const newWidth = Math.max(minW, Math.min(clientX, window.innerWidth - 50));
+      setSidebarWidth(newWidth);
+      if (isDesktop) {
+        localStorage.setItem('sidebarWidthDesktop', newWidth.toString());
+      } else {
+        localStorage.setItem('sidebarWidthMobile', newWidth.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('touchmove', handleMouseMove, { passive: false });
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchend', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('touchmove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isResizing]);
 
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());
@@ -109,6 +180,13 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     // If query has changed (or items changed), calculate parents of directly matching items to expand
     if (currentQuery !== prevQuery || itemsChanged) {
       const query = currentQuery.toLowerCase();
+      
+      // Auto-expand pinned folder if a pinned file matches
+      const hasPinnedMatch = items.some(item => item.isPinned && item.type === 'file' && item.name.toLowerCase().includes(query));
+      if (hasPinnedMatch) {
+        setIsPinnedFolderExpanded(true);
+      }
+
       const directMatchingIds = new Set();
       items.forEach(item => {
         if (item.name.toLowerCase().includes(query)) {
@@ -200,6 +278,27 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     }
   };
 
+  const handleBatchPin = async () => {
+    const selectedFiles = items.filter(item => selectedItemIds.has(item._id) && item.type === 'file' && !item.isPinned);
+    if (selectedFiles.length === 0) {
+      alert("No unpinned files selected.");
+      return;
+    }
+    try {
+      const promises = selectedFiles.map((file, idx) => api.put(`/items/${file._id}`, { 
+        isPinned: true,
+        pinOrder: Date.now() + idx 
+      }));
+      await Promise.all(promises);
+      setSelectedItemIds(new Set());
+      setIsSelectMode(false);
+      fetchItems();
+    } catch (err) {
+      console.error("Failed to batch pin items:", err);
+      alert("Failed to pin selected files");
+    }
+  };
+
   const clearDragTimeout = () => {
     if (dragExpandTimeoutRef.current) {
       clearTimeout(dragExpandTimeoutRef.current);
@@ -215,13 +314,29 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     return () => window.removeEventListener('click', closeDropdown);
   }, []);
 
+  const pinnedFiles = useMemo(() => {
+    if (!isAuthenticated) return [];
+    const query = searchQuery.trim().toLowerCase();
+    return items.filter(item => {
+      if (!item.isPinned || item.type !== 'file') return false;
+      if (query && !item.name.toLowerCase().includes(query)) return false;
+      return true;
+    }).sort((a, b) => (a.pinOrder || 0) - (b.pinOrder || 0));
+  }, [items, isAuthenticated, searchQuery]);
+
   // Group items by parent
   const treeData = useMemo(() => {
+    if (!isAuthenticated) {
+      return { rootItems: [], childrenMap: {} };
+    }
+
     const rootItems = [];
     const childrenMap = {};
 
-    // Group items first
+    // Group items first, excluding pinned items (they are displayed in the virtual Pinned folder)
     items.forEach(item => {
+      if (item.isPinned) return;
+
       if (!item.parentId) {
         rootItems.push(item);
       } else {
@@ -230,30 +345,66 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
       }
     });
 
-    // 1. Sort rootItems by order ascending, then by creation date (newest first / descending)
-    rootItems.sort((a, b) => {
-      if (a.order !== b.order) {
-        return a.order - b.order;
+    // Separate Archive folder from other root items
+    let archiveFolder = null;
+    const regularRootItems = [];
+    rootItems.forEach(item => {
+      if (item.isArchive) {
+        archiveFolder = item;
+      } else {
+        regularRootItems.push(item);
+      }
+    });
+
+    // Sort regular rootItems
+    regularRootItems.sort((a, b) => {
+      if (sortDirection === 'custom') {
+        return (a.order || 0) - (b.order || 0);
       }
       const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
       const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-      return dateB - dateA;
+      return sortDirection === 'desc' ? dateB - dateA : dateA - dateB;
     });
 
-    // 2. Sort subfolder items by order ascending, then by creation date (oldest first / ascending)
+    // Reassemble rootItems with Archive folder handling
+    let sortedRootItems = regularRootItems;
+    if (archiveFolder) {
+      if (sortDirection === 'asc') {
+        // Oldest first -> Archive goes to top
+        sortedRootItems = [archiveFolder, ...regularRootItems];
+      } else {
+        // Custom or Newest first -> Archive goes to bottom
+        sortedRootItems = [...regularRootItems, archiveFolder];
+      }
+    }
+
+    // Sort subfolder items
     Object.keys(childrenMap).forEach(parentId => {
       childrenMap[parentId].sort((a, b) => {
-        if (a.order !== b.order) {
-          return a.order - b.order;
+        if (sortDirection === 'custom') {
+          return (a.order || 0) - (b.order || 0);
         }
         const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
         const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-        return dateA - dateB;
+        return sortDirection === 'desc' ? dateB - dateA : dateA - dateB;
       });
     });
 
-    return { rootItems, childrenMap };
-  }, [items]);
+    let finalRootItems = [...sortedRootItems];
+    const finalChildrenMap = {};
+    Object.keys(childrenMap).forEach(key => {
+      finalChildrenMap[key] = [...childrenMap[key]];
+    });
+
+    if (isReversed) {
+      finalRootItems.reverse();
+      Object.keys(finalChildrenMap).forEach(key => {
+        finalChildrenMap[key].reverse();
+      });
+    }
+
+    return { rootItems: finalRootItems, childrenMap: finalChildrenMap };
+  }, [items, isAuthenticated, sortDirection, isReversed]);
 
   const activeAncestors = useMemo(() => {
     const ancestors = new Set();
@@ -322,10 +473,22 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
   };
 
   const uploadFile = async (file, parentId) => {
-    if (!file.name.endsWith('.md')) {
-      alert('Please upload a .md file');
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'doc', 'docx', 'md'];
+    
+    if (!allowedExtensions.includes(ext)) {
+      alert('Only PDF, Image, DOCX, and MD files are allowed to be uploaded.');
       return;
     }
+
+    const isMd = ext === 'md';
+    const maxSize = 20 * 1024 * 1024; // 20 MB
+
+    if (!isMd && file.size > maxSize) {
+      alert('File size exceeds the 20MB limit.');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const content = event.target.result;
@@ -349,7 +512,12 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
         alert(msg);
       }
     };
-    reader.readAsText(file);
+
+    if (isMd) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFileChange = (e) => {
@@ -468,28 +636,24 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
 
   const handleRename = async (item, e) => {
     e.stopPropagation();
-    const cleanName = item.type === 'file' ? item.name.replace(/\.md$/i, '') : item.name;
+    const cleanName = item.name.replace(/\.[^/.]+$/, '');
     const inputName = prompt('Enter new name:', cleanName);
     if (!inputName) return;
 
     let newName = inputName.trim();
     if (!newName) return;
 
-    if (item.type === 'file' && !newName.toLowerCase().endsWith('.md')) {
-      newName += '.md';
-    }
-
-    if (newName === item.name) return;
+    if (newName === cleanName) return;
 
     // Client-side duplicate check
     const isDuplicate = items.some(existingItem =>
       existingItem.parentId === item.parentId &&
       existingItem._id !== item._id &&
-      existingItem.name.toLowerCase() === newName.toLowerCase()
+      existingItem.name.replace(/\.[^/.]+$/, '').toLowerCase() === newName.toLowerCase()
     );
 
     if (isDuplicate) {
-      alert(`An item named "${newName.replace(/\.md$/i, '')}" already exists in this folder`);
+      alert(`An item named "${newName}" already exists in this folder`);
       return;
     }
 
@@ -503,6 +667,68 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     }
   };
 
+  const handleTogglePin = async (item, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const payload = { isPinned: !item.isPinned };
+      if (!item.isPinned) {
+        // When pinning, give it the highest possible order so it goes to the bottom
+        payload.pinOrder = Date.now();
+      }
+      await api.put(`/items/${item._id}`, payload);
+      fetchItems();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to pin/unpin item');
+    }
+  };
+
+  const handleUnpinAll = async (e) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Are you sure you want to unpin all pinned files?")) return;
+    try {
+      const promises = pinnedFiles.map(file => api.put(`/items/${file._id}`, { isPinned: false }));
+      await Promise.all(promises);
+      fetchItems();
+      setActiveDropdownId(null);
+    } catch (err) {
+      console.error("Failed to unpin all:", err);
+      alert("Failed to unpin all files");
+    }
+  };
+
+  const handleTogglePinnedSelectItem = (itemId, e) => {
+    if (e) e.stopPropagation();
+    const newSelected = new Set(selectedPinnedItemIds);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+    }
+    setSelectedPinnedItemIds(newSelected);
+  };
+
+  const handleUnpinSelected = async (e) => {
+    if (e) e.stopPropagation();
+    const selectedPinned = pinnedFiles.filter(file => selectedPinnedItemIds.has(file._id));
+    if (selectedPinned.length === 0) {
+      alert("Please select one or more pinned files first.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to unpin the ${selectedPinned.length} selected file(s)?`)) return;
+    try {
+      const promises = selectedPinned.map(file => api.put(`/items/${file._id}`, { isPinned: false }));
+      await Promise.all(promises);
+      setSelectedPinnedItemIds(new Set());
+      setIsPinnedSelectMode(false);
+      fetchItems();
+      setActiveDropdownId(null);
+    } catch (err) {
+      console.error("Failed to unpin selected:", err);
+      alert("Failed to unpin selected files");
+    }
+  };
+
   const onDragEnd = async (result) => {
     if (!isAuthenticated) return;
 
@@ -511,8 +737,50 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
+    // Block custom reordering of normal items if there are pinned files
+    if (source.droppableId !== 'pinned' && destination.droppableId !== 'pinned' && pinnedFiles.length > 0) {
+      alert("Notice: Please unpin all files to enable custom reordering.");
+      return;
+    }
+
+    // Drag-and-drop within pinned folder
+    if (source.droppableId === 'pinned' || destination.droppableId === 'pinned') {
+      if (source.droppableId !== 'pinned' || destination.droppableId !== 'pinned') {
+        // Dragging into/out of pinned is not allowed
+        return;
+      }
+      
+      const newPinned = [...pinnedFiles];
+      const draggedItemIndex = newPinned.findIndex(i => i._id === draggableId);
+      if (draggedItemIndex === -1) return;
+      const [removed] = newPinned.splice(draggedItemIndex, 1);
+      newPinned.splice(destination.index, 0, removed);
+      
+      const updates = newPinned.map((item, index) => ({
+        id: item._id,
+        pinOrder: index
+      }));
+      
+      try {
+        await api.put('/items/action/reorder', { updates });
+        fetchItems();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to reorder pinned files');
+      }
+      return;
+    }
+
     // Get the new parentId
     const newParentId = destination.droppableId === 'root' ? null : destination.droppableId;
+
+    const draggedItem = items.find(i => i._id === draggableId);
+    if (draggedItem && draggedItem.isArchive) return; // Cannot drag/reorder Archive folder
+
+    // Automatically switch to custom sort mode when user drags an item
+    if (sortDirection !== 'custom') {
+      setSortDirection('custom');
+    }
 
     // Create an optimistic update
     const newItems = [...items];
@@ -524,12 +792,27 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
       };
     }
 
-    // Now we need to recalculate order for the destination children
-    const destinationChildren = newItems.filter(i => (i.parentId || 'root') === (newParentId || 'root') && i._id !== draggableId)
+    // Now we need to recalculate order for the destination children, excluding the Archive folder and pinned items
+    const destinationChildren = newItems.filter(i => (i.parentId || 'root') === (newParentId || 'root') && i._id !== draggableId && !i.isArchive && !i.isPinned)
       .sort((a, b) => a.order - b.order);
 
+    let targetIndex = destination.index;
+    if (isReversed) {
+      const destParentId = destination.droppableId === 'root' ? null : destination.droppableId;
+      const destSiblings = items.filter(i => (i.parentId || 'root') === (destParentId || 'root') && !i.isArchive && !i.isPinned);
+      let destLength = destSiblings.length;
+      if (source.droppableId !== destination.droppableId) {
+        destLength += 1;
+      }
+      let destIndex = destination.index;
+      if (destination.droppableId === 'root') {
+        destIndex = Math.max(0, destination.index - 1);
+      }
+      targetIndex = destLength - 1 - destIndex;
+    }
+
     // Insert at new index
-    destinationChildren.splice(destination.index, 0, newItems[draggedItemIndex]);
+    destinationChildren.splice(targetIndex, 0, newItems[draggedItemIndex]);
 
     // Generate updates
     const updates = destinationChildren.map((item, index) => ({
@@ -565,7 +848,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
               const isExpanded = expandedFolders.has(item._id);
 
               return (
-                <Draggable key={item._id} draggableId={item._id} index={index} isDragDisabled={isSelectMode || !isAuthenticated}>
+                <Draggable key={item._id} draggableId={item._id} index={index} isDragDisabled={isSelectMode || !isAuthenticated || item.isArchive}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
@@ -615,7 +898,7 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
                             <FaFileAlt color="#94a3b8" />
                           )}
                         </div>
-                        <span className="tree-item-name">{item.name.replace(/\.md$/i, '')}</span>
+                        <span className="tree-item-name">{item.name.replace(/\.[^/.]+$/, '')}</span>
 
                         {!isSelectMode && isAuthenticated && (
                           <div className={`tree-item-actions dropdown-container ${activeDropdownId === item._id ? 'open' : ''}`}>
@@ -640,12 +923,21 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
                                     </button>
                                   </>
                                 )}
-                                <button className="dropdown-item" onClick={(e) => { handleRename(item, e); setActiveDropdownId(null); }}>
-                                  <FaEdit size={12} /> Rename
-                                </button>
-                                <button className="dropdown-item" onClick={(e) => { handleDelete(item._id, e); setActiveDropdownId(null); }} style={{ color: 'var(--danger)' }}>
-                                  <FaTrash size={12} /> Delete
-                                </button>
+                                {item.type === 'file' && (
+                                  <button className="dropdown-item" onClick={(e) => { handleTogglePin(item, e); setActiveDropdownId(null); }}>
+                                    <FaThumbtack size={12} /> {item.isPinned ? 'Unpin' : 'Pin'}
+                                  </button>
+                                )}
+                                {!item.isArchive && (
+                                  <>
+                                    <button className="dropdown-item" onClick={(e) => { handleRename(item, e); setActiveDropdownId(null); }}>
+                                      <FaEdit size={12} /> Rename
+                                    </button>
+                                    <button className="dropdown-item" onClick={(e) => { handleDelete(item._id, e); setActiveDropdownId(null); }} style={{ color: 'var(--danger)' }}>
+                                      <FaTrash size={12} /> Delete
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -676,10 +968,15 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      style={{
+        '--sidebar-width': `${sidebarWidth}px`,
+        width: 'var(--sidebar-width)',
+        transition: isResizing ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+      }}
     >
       <input
         type="file"
-        accept=".md"
+        accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.svg,.doc,.docx,.md"
         ref={fileInputRef}
         style={{ display: 'none' }}
         onChange={handleFileChange}
@@ -693,6 +990,14 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
         </div>
         {isAuthenticated && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              className={`action-btn ${isReversed ? 'active' : ''}`}
+              style={{ color: isReversed ? 'var(--accent)' : 'inherit' }}
+              onClick={() => setIsReversed(!isReversed)}
+              title="Reverse Order (Temporary)"
+            >
+              <FaSort size={14} />
+            </button>
             <button
               className={`action-btn ${isSelectMode ? 'active' : ''}`}
               style={{ color: isSelectMode ? 'var(--accent)' : 'inherit' }}
@@ -744,6 +1049,135 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
       </div>
       <div className="sidebar-content">
         <DragDropContext onDragEnd={onDragEnd}>
+          {isAuthenticated && pinnedFiles.length > 0 && (
+            <div className="pinned-folder-container" style={{ marginBottom: '15px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+              <div 
+                className={`tree-item virtual-pinned-folder ${activeDropdownId === 'pinned-folder' ? 'menu-open' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '6px 10px', borderRadius: '6px', gap: '8px' }}
+                onClick={() => setIsPinnedFolderExpanded(!isPinnedFolderExpanded)}
+              >
+                <div className="tree-item-icon">
+                  {isPinnedFolderExpanded ? <FaFolderOpen color="#3b82f6" /> : <FaFolder color="#3b82f6" />}
+                </div>
+                <span className="tree-item-name" style={{ fontWeight: '600', color: 'var(--text-main)', flex: 1 }}>Pinned Files</span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                  <button 
+                    className={`action-btn ${isPinnedSelectMode ? 'active' : ''}`}
+                    style={{ color: isPinnedSelectMode ? 'var(--accent)' : 'inherit' }}
+                    onClick={() => {
+                      setIsPinnedSelectMode(!isPinnedSelectMode);
+                      setSelectedPinnedItemIds(new Set());
+                    }}
+                    title="Toggle Pinned Select Mode"
+                  >
+                    <FaCheckSquare size={12} />
+                  </button>
+                  
+                  <div className={`tree-item-actions dropdown-container ${activeDropdownId === 'pinned-folder' ? 'open' : ''}`}>
+                    <button 
+                      className="action-btn"
+                      onClick={(e) => { e.stopPropagation(); setActiveDropdownId(activeDropdownId === 'pinned-folder' ? null : 'pinned-folder'); }}
+                    >
+                      <FaEllipsisV size={12} />
+                    </button>
+                    {activeDropdownId === 'pinned-folder' && (
+                      <div className="dropdown-menu" style={{ right: 0, top: '24px', display: 'block' }}>
+                        <div style={{ padding: '6px 12px', fontSize: '0.75rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', marginBottom: '4px', fontWeight: 'bold' }}>
+                          Total Pinned: {pinnedFiles.length}
+                        </div>
+                        <button className="dropdown-item" onClick={handleUnpinAll}>
+                          <FaThumbtack size={12} style={{ marginRight: '6px' }} /> Unpin All
+                        </button>
+                        <button className="dropdown-item" onClick={handleUnpinSelected}>
+                          <FaThumbtack size={12} style={{ marginRight: '6px' }} /> Unpin
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {isPinnedFolderExpanded && (
+                <Droppable droppableId="pinned" type="ITEM">
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="tree-children-container"
+                      style={{ paddingLeft: '15px', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', minHeight: '10px' }}
+                    >
+                      {pinnedFiles.map((file, index) => (
+                        <Draggable key={file._id} draggableId={file._id} index={index} isDragDisabled={isPinnedSelectMode || isSelectMode || !isAuthenticated}>
+                          {(providedDrag, snapshotDrag) => (
+                            <div 
+                              ref={providedDrag.innerRef}
+                              {...providedDrag.draggableProps}
+                              {...providedDrag.dragHandleProps}
+                              className={`tree-item ${selectedFileId === file._id ? 'active' : ''} ${snapshotDrag.isDragging ? 'dragging' : ''} ${isPinnedSelectMode && selectedPinnedItemIds.has(file._id) ? 'selected' : ''}`}
+                              style={{ 
+                                ...providedDrag.draggableProps.style,
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                padding: '6px 10px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer', 
+                                gap: '8px',
+                                opacity: snapshotDrag.isDragging ? 0.8 : 1
+                              }}
+                              onClick={(e) => {
+                                if (isPinnedSelectMode) {
+                                  handleTogglePinnedSelectItem(file._id, e);
+                                } else {
+                                  onSelectFile(file);
+                                }
+                              }}
+                            >
+                              {isPinnedSelectMode && (
+                                <div className="tree-item-checkbox-container" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    className="tree-item-checkbox"
+                                    checked={selectedPinnedItemIds.has(file._id)}
+                                    onChange={(e) => handleTogglePinnedSelectItem(file._id, e)}
+                                  />
+                                </div>
+                              )}
+                              <div className="tree-item-icon">
+                                <FaFileAlt color="#3b82f6" />
+                              </div>
+                              <span className="tree-item-name" style={{ flex: 1 }}>{file.name.replace(/\.[^/.]+$/, '')}</span>
+                              <div className="tree-item-actions dropdown-container">
+                                <button 
+                                  className="action-btn"
+                                  onClick={(e) => { e.stopPropagation(); setActiveDropdownId(activeDropdownId === `pinned-${file._id}` ? null : `pinned-${file._id}`); }}
+                                >
+                                  <FaEllipsisV size={12} />
+                                </button>
+                                {activeDropdownId === `pinned-${file._id}` && (
+                                  <div className="dropdown-menu" style={{ right: 0, top: '24px', display: 'block' }}>
+                                    <button className="dropdown-item" onClick={(e) => { handleRename(file, e); setActiveDropdownId(null); }}>
+                                      <FaEdit size={12} style={{ marginRight: '6px' }} /> Rename
+                                    </button>
+                                    <button className="dropdown-item" onClick={(e) => { handleTogglePin(file, e); setActiveDropdownId(null); }}>
+                                      <FaThumbtack size={12} style={{ marginRight: '6px' }} /> Unpin
+                                    </button>
+                                    <button className="dropdown-item text-danger" onClick={(e) => { handleDelete(file._id, e); setActiveDropdownId(null); }}>
+                                      <FaTrash size={12} style={{ marginRight: '6px' }} /> Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              )}
+            </div>
+          )}
           {renderTree(treeData.rootItems)}
         </DragDropContext>
       </div>
@@ -755,6 +1189,9 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
           <div className="batch-actions-btns">
             <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={() => { setIsSelectMode(false); setSelectedItemIds(new Set()); }}>
               Cancel
+            </button>
+            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem', gap: '6px', color: 'var(--text-main)', border: '1px solid var(--border)' }} onClick={handleBatchPin} disabled={selectedItemIds.size === 0}>
+              <FaThumbtack size={12} style={{ color: 'var(--accent)' }} /> Pin
             </button>
             <button className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.85rem', gap: '6px' }} onClick={handleBatchDelete} disabled={selectedItemIds.size === 0}>
               <FaTrash size={12} /> Delete
@@ -784,6 +1221,24 @@ const Sidebar = ({ items, fetchItems, onSelectFile, selectedFileId, isOpen }) =>
           <button className="btn" style={{ width: '100%' }} onClick={() => navigate('/login')}>Login</button>
         )}
       </div>
+      <div 
+        className="sidebar-resizer" 
+        onMouseDown={initResize}
+        onTouchStart={initResize}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '5px',
+          height: '100%',
+          cursor: 'col-resize',
+          zIndex: 1000,
+          background: isResizing ? 'var(--accent)' : 'transparent',
+          transition: 'background 0.2s',
+          maxWidth: '80vw',
+          transform: 'translateX(0)'
+        }}
+      />
     </div>
   );
 };

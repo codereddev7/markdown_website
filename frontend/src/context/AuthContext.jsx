@@ -49,6 +49,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const register = async (email, password) => {
+    try {
+      await api.post('/auth/register', { email, password });
+      setIsAuthenticated(true);
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      return { success: false, msg: err.response?.data?.msg || 'Registration failed' };
+    }
+  };
+
   const logout = async () => {
     try {
       await api.post('/auth/logout');
@@ -60,7 +71,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, loading }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, register, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
